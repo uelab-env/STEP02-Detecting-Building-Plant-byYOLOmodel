@@ -101,7 +101,7 @@ def load_all_building_boundaries(boundary_dir):
 # =====================================================
 # YOLO検出実行（閾値0.1）
 # =====================================================
-def detect_all_objects(image_folder, model, threshold=INITIAL_THRESHOLD):
+def detect_all_objects(png_folder, tfw_folder, model, threshold=INITIAL_THRESHOLD):
     """全画像でYOLO検出を実行"""
     print("="*80)
     print(f"YOLO検出を実行中（閾値={threshold}）...")
@@ -111,13 +111,13 @@ def detect_all_objects(image_folder, model, threshold=INITIAL_THRESHOLD):
     output_dir = "detection_results_images"
     os.makedirs(output_dir, exist_ok=True)
     
-    image_files = natsorted(glob.glob(os.path.join(image_folder, "*.png")))
+    image_files = natsorted(glob.glob(os.path.join(png_folder, "*.png")))
     
     for i, image_path in enumerate(image_files, 1):
         print(f"[{i}/{len(image_files)}] 検出中: {os.path.basename(image_path)}")
         
         base_name = os.path.splitext(os.path.basename(image_path))[0]
-        tfw_path = os.path.join(image_folder, f"{base_name}.tfw")
+        tfw_path = os.path.join(tfw_folder, f"{base_name}.tfw")
         
         if not os.path.exists(tfw_path):
             continue
@@ -169,24 +169,25 @@ def detect_all_objects(image_folder, model, threshold=INITIAL_THRESHOLD):
 # =====================================================
 # 建物が映っている画像を判定
 # =====================================================
-def find_images_containing_building(building_lat, building_lng, image_folder):
+def find_images_containing_building(building_lat, building_lng, png_folder, tfw_folder):
     """
     建物の緯度経度が含まれる画像を検索
     
     Args:
         building_lat: 建物の緯度
         building_lng: 建物の経度
-        image_folder: 画像フォルダ
+        png_folder: PNG画像フォルダ
+        tfw_folder: TFWフォルダ
     
     Returns:
         list: 建物が含まれる画像ファイル名のリスト
     """
     matching_images = []
-    image_files = glob.glob(os.path.join(image_folder, "*.png"))
+    image_files = glob.glob(os.path.join(png_folder, "*.png"))
     
     for image_path in image_files:
         base_name = os.path.splitext(os.path.basename(image_path))[0]
-        tfw_path = os.path.join(image_folder, f"{base_name}.tfw")
+        tfw_path = os.path.join(tfw_folder, f"{base_name}.tfw")
         
         if not os.path.exists(tfw_path):
             continue
@@ -225,7 +226,7 @@ def find_images_containing_building(building_lat, building_lng, image_folder):
 # =====================================================
 # 建物ごとの画像マッピングを事前に作成
 # =====================================================
-def create_building_image_mapping(building_df, image_folder):
+def create_building_image_mapping(building_df, png_folder, tfw_folder):
     """
     各建物がどの画像に含まれるかを事前にマッピング
     
@@ -242,7 +243,7 @@ def create_building_image_mapping(building_df, image_folder):
         building_lat = row['緯度']
         building_lng = row['経度']
         
-        images = find_images_containing_building(building_lat, building_lng, image_folder)
+        images = find_images_containing_building(building_lat, building_lng, png_folder, tfw_folder)
         building_image_map[idx] = images
         
         if (idx + 1) % 10 == 0:
@@ -366,9 +367,10 @@ def main():
     print("="*80)
     
     # パス設定
-    image_folder = "image_cut"
+    png_folder = os.path.join("input", "image_cut", "png")
+    tfw_folder = os.path.join("input", "image_cut", "tfw")
     model_path = "models/best.pt"
-    building_csv_path = "BPO13102_地域冷暖房.csv"
+    building_csv_path = "input/building_list/TokyoChuo.csv"
     boundary_folder = "bld_boundary"
     
     # YOLOモデル読み込み
@@ -386,12 +388,7 @@ def main():
     print(f"建物境界線データを読み込みました: {len(building_boundaries)}件")
     
     # ステップ1: 閾値0.1で全オブジェクト検出
-    all_detections = detect_all_objects(image_folder, model, threshold=INITIAL_THRESHOLD)
-    
-    # 検出結果を保存
-    detections_df = pd.DataFrame(all_detections)
-    detections_df.to_csv("all_detections_th0.1.csv", index=False, encoding='utf-8-sig')
-    print(f"全検出結果を保存: all_detections_th0.1.csv")
+    all_detections = detect_all_objects(png_folder, tfw_folder, model, threshold=INITIAL_THRESHOLD)
     
     # ステップ2: 建物ごとのオブジェクトマッピング（高速化のため事前処理）
     building_detections_map = map_detections_to_buildings(
