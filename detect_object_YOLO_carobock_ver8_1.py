@@ -452,7 +452,10 @@ def main():
     )
 
     # ステップ4: 入力CSVに plant 列を追加したファイルを保存
-    output_csv_path = os.path.splitext(building_csv_path)[0] + "_with_plant.csv"
+    output_folder = "output"
+    os.makedirs(output_folder, exist_ok=True)
+    input_csv_name = os.path.splitext(os.path.basename(building_csv_path))[0]
+    output_csv_path = os.path.join(output_folder, input_csv_name + "_with_plant.csv")
     output_df.to_csv(output_csv_path, index=False, encoding='utf-8-sig')
     print(f"\n出力CSVを保存: {output_csv_path}")
     
