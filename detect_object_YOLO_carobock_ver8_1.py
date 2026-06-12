@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-YOLO検出と固定閾値による設備判定プログラム (ver8.1)
+YOLO検出と固定閾値による設備判定プログラム (ver8.2)
 - 閾値0.1で全オブジェクト検出
 - CT, ACC, MUL, PACの閾値を固定（CT=0.3, ACC=0.3, MUL=0.6, PAC=0.6）
 - 入力CSVに plant 列を追加して出力
@@ -11,10 +11,16 @@ YOLO検出と固定閾値による設備判定プログラム (ver8.1)
 - XML並列読み込み（ThreadPoolExecutor）
 - YOLOバッチ推論（複数画像をまとめて推論）
 - STRtree 空間インデックスによる建物マッピング高速化（O(n²)→O(n log n)）
+[キャッシュ機能 ver8.2]
+- YOLO検出結果を cache/detections_cache.json に保存
+- 建物-検出マッピングを cache/building_detections_map_cache.json に保存
+- 2回目以降はモデルロード・YOLO推論・空間マッピングをスキップして高速化
+- USE_DETECTION_CACHE=False にすると強制的に再計算
 """
 
 import os
 import glob
+import json
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
@@ -32,9 +38,57 @@ GSD_METERS_PER_PIXEL = 0.075
 EPSG_CODE = 6677
 INITIAL_THRESHOLD = 0.1  # 初期検出閾値
 YOLO_BATCH_SIZE = 8       # バッチ推論枚数（メモリに合わせて調整）
+CACHE_DIR = "cache"       # キャッシュ保存先フォルダ
+USE_DETECTION_CACHE = True  # True: キャッシュがあれば再計算をスキップ / False: 強制再計算
 
 # Transformer をモジュールレベルでキャッシュ（呼び出しごとの生成コストを排除）
 _TRANSFORMER = Transformer.from_crs(f"EPSG:{EPSG_CODE}", "EPSG:4326", always_xy=True)
+
+# =====================================================
+# キャッシュ保存・読み込み
+# =====================================================
+def get_cache_paths(cache_dir=CACHE_DIR):
+    """キャッシュファイルのパスを返す"""
+    os.makedirs(cache_dir, exist_ok=True)
+    return {
+        'detections': os.path.join(cache_dir, 'detections_cache.json'),
+        'building_map': os.path.join(cache_dir, 'building_detections_map_cache.json'),
+    }
+
+
+def save_detections_cache(all_detections, cache_path):
+    """YOLO検出結果をJSONキャッシュに保存"""
+    with open(cache_path, 'w', encoding='utf-8') as f:
+        json.dump(all_detections, f, ensure_ascii=False, indent=2)
+    print(f"  [Cache] 検出結果を保存しました: {cache_path} ({len(all_detections)}件)")
+
+
+def load_detections_cache(cache_path):
+    """JSONキャッシュからYOLO検出結果を読み込む"""
+    with open(cache_path, 'r', encoding='utf-8') as f:
+        all_detections = json.load(f)
+    print(f"  [Cache] 検出結果を読み込みました: {cache_path} ({len(all_detections)}件)")
+    return all_detections
+
+
+def save_building_detections_map_cache(building_detections_map, cache_path):
+    """建物-検出オブジェクトマッピングをJSONキャッシュに保存"""
+    # JSONはキーを文字列に変換して保存
+    serializable = {str(k): v for k, v in building_detections_map.items()}
+    with open(cache_path, 'w', encoding='utf-8') as f:
+        json.dump(serializable, f, ensure_ascii=False, indent=2)
+    print(f"  [Cache] 建物マッピングを保存しました: {cache_path} ({len(building_detections_map)}件)")
+
+
+def load_building_detections_map_cache(cache_path):
+    """JSONキャッシュから建物-検出オブジェクトマッピングを読み込む"""
+    with open(cache_path, 'r', encoding='utf-8') as f:
+        serialized = json.load(f)
+    # キーを整数（DataFrameのインデックス）に戻す
+    building_detections_map = {int(k): v for k, v in serialized.items()}
+    print(f"  [Cache] 建物マッピングを読み込みました: {cache_path} ({len(building_detections_map)}件)")
+    return building_detections_map
+
 
 # =====================================================
 # TFWファイル読み込み
@@ -407,7 +461,7 @@ def assign_plant_with_fixed_thresholds(building_df, building_detections_map,
 # =====================================================
 def main():
     print("="*80)
-    print("YOLO検出と固定閾値による設備判定プログラム (ver8.0)")
+    print("YOLO検出と固定閾値による設備判定プログラム (ver8.2)")
     print("="*80)
     
     # パス設定
@@ -416,28 +470,59 @@ def main():
     model_path = "models/best.pt"
     building_csv_path = "input/building_list/TokyoChuo.csv"
     boundary_folder = "bld_boundary"
-    
-    # YOLOモデル読み込み
-    print(f"\nYOLOモデルを読み込んでいます: {model_path}")
-    model = YOLO(model_path)
-    print("モデル読み込み完了")
-    
-    # 建物データ読み込み
+
+    # キャッシュパス確認
+    cache_paths = get_cache_paths()
+    use_det_cache = USE_DETECTION_CACHE and os.path.exists(cache_paths['detections'])
+    use_map_cache = USE_DETECTION_CACHE and os.path.exists(cache_paths['building_map'])
+
+    if use_det_cache:
+        print(f"\n[Cache] 検出キャッシュが存在します: {cache_paths['detections']}")
+        print("        YOLOモデルのロードと推論をスキップします。")
+        print("        ※再推論したい場合は USE_DETECTION_CACHE=False にするか、キャッシュファイルを削除してください。")
+    if use_map_cache:
+        print(f"[Cache] 建物マッピングキャッシュが存在します: {cache_paths['building_map']}")
+        print("        建物境界線データのロードと空間マッピングをスキップします。")
+
+    # YOLOモデル読み込み（検出キャッシュがない場合のみ）
+    model = None
+    if not use_det_cache:
+        print(f"\nYOLOモデルを読み込んでいます: {model_path}")
+        model = YOLO(model_path)
+        print("モデル読み込み完了")
+
+    # 建物データ読み込み（常に必要）
     building_df = pd.read_csv(building_csv_path, encoding='utf-8')
     print(f"\n建物CSVデータを読み込みました: {len(building_df)}件")
-    
-    # 建物境界線データ読み込み
-    print(f"\n建物境界線データを読み込んでいます...")
-    building_boundaries = load_all_building_boundaries(boundary_folder)
-    print(f"建物境界線データを読み込みました: {len(building_boundaries)}件")
-    
-    # ステップ1: 閾値0.1で全オブジェクト検出
-    all_detections = detect_all_objects(png_folder, tfw_folder, model, threshold=INITIAL_THRESHOLD)
-    
-    # ステップ2: 建物ごとのオブジェクトマッピング（高速化のため事前処理）
-    building_detections_map = map_detections_to_buildings(
-        all_detections, building_df, building_boundaries
-    )
+
+    # 建物境界線データ読み込み（マッピングキャッシュがない場合のみ）
+    building_boundaries = {}
+    if not use_map_cache:
+        print(f"\n建物境界線データを読み込んでいます...")
+        building_boundaries = load_all_building_boundaries(boundary_folder)
+        print(f"建物境界線データを読み込みました: {len(building_boundaries)}件")
+
+    # ステップ1: 閾値0.1で全オブジェクト検出（キャッシュ利用）
+    if use_det_cache:
+        print("\n[Cache] 検出結果をキャッシュから読み込みます...")
+        all_detections = load_detections_cache(cache_paths['detections'])
+    else:
+        all_detections = detect_all_objects(png_folder, tfw_folder, model, threshold=INITIAL_THRESHOLD)
+        if USE_DETECTION_CACHE:
+            print("\n検出結果をキャッシュに保存中...")
+            save_detections_cache(all_detections, cache_paths['detections'])
+
+    # ステップ2: 建物ごとのオブジェクトマッピング（キャッシュ利用）
+    if use_map_cache:
+        print("\n[Cache] 建物マッピングをキャッシュから読み込みます...")
+        building_detections_map = load_building_detections_map_cache(cache_paths['building_map'])
+    else:
+        building_detections_map = map_detections_to_buildings(
+            all_detections, building_df, building_boundaries
+        )
+        if USE_DETECTION_CACHE:
+            print("\n建物マッピングをキャッシュに保存中...")
+            save_building_detections_map_cache(building_detections_map, cache_paths['building_map'])
 
     # ステップ3: 固定閾値で plant を判定
     print("\n固定閾値で plant を判定中...")
@@ -455,7 +540,7 @@ def main():
     output_folder = "output"
     os.makedirs(output_folder, exist_ok=True)
     input_csv_name = os.path.splitext(os.path.basename(building_csv_path))[0]
-    output_csv_path = os.path.join(output_folder, input_csv_name + "_with_plant.csv")
+    output_csv_path = os.path.join(output_folder, input_csv_name + ".csv")
     output_df.to_csv(output_csv_path, index=False, encoding='utf-8-sig')
     print(f"\n出力CSVを保存: {output_csv_path}")
     
