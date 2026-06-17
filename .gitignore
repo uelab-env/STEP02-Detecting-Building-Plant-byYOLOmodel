@@ -1,3 +1,5 @@
-image_cut/*
+input/*
 bld_boundary/*
 detection_results_images/*
+results_past/*
+cache/*
