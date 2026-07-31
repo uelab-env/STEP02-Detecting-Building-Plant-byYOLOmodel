@@ -2,6 +2,12 @@
 # Building Equipment Detection from Aerial Imagery (YOLOv8 OBB)
 
 ---
+## 前提・準備 📋
+- 実行環境：Windows11のUbuntu 24.04.3 LTS
+- 仮想環境：Python 3.10.20
+- 仮想環境は以下のコマンドを実行して構築可能
+```conda env create -f yolo_env.yaml```
+
 
 ## 日本語
 
@@ -252,7 +258,8 @@ Place the trained model file at `models/best.pt` (must be obtained separately).
 | `input/image_cut/tfw/` | Corresponding TFW files (filenames must match the PNG files) |
 | `input/building_list/TokyoChuo.csv` | Building list CSV (must include `緯度` and `経度` columns) |
 | `bld_boundary/` | Building boundary XMLs (Japan GSI Fundamental Geospatial Data, FGD BldA GML format) |
-
+- 建物境界線データは以下のリンクを参考にダウンロードしてください  
+https://uelab.growi.cloud/6a6c68099b9a6f8caadc8172
 #### Required Columns in the Building List CSV
 
 | Column | Description |
