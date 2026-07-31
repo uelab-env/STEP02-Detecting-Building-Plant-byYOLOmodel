@@ -88,6 +88,9 @@ pip install ultralytics shapely pyproj pandas Pillow natsort tqdm
 | `input/building_list/TokyoChuo.csv` | 建物リスト CSV（`緯度`・`経度` 列が必要） |
 | `bld_boundary/` | 建物境界線 XML（国土地理院「基盤地図情報 建物外周」FGD BldA 形式） |
 
+- 建物境界線データは以下のリンクを参考にダウンロードしてください  
+https://uelab.growi.cloud/6a6c68099b9a6f8caadc8172
+
 #### 建物リスト CSV に必要な列
 
 | 列名 | 説明 |
