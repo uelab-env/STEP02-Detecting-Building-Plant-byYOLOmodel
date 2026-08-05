@@ -55,9 +55,11 @@
 #### 1. リポジトリのクローン
 
 ```bash
-git clone <リポジトリURL>[URL](git@github.com:uelab-env/STEP02-Detecting-Building-Plant-byYOLOmodel.git)
+git clone <リポジトリURL>
 cd <リポジトリ名>[]
 ```
+[リポジトリURL]　：git@github.com:uelab-env/STEP02-Detecting-Building-Plant-byYOLOmodel.git  
+[リポジトリ名]　：STEP02-Detecting-Building-Plant-byYOLOmodel
 
 #### 2. 開発環境の構築
 yamlから開発環境を構築(2-1）推奨、または手順に従ってcondaで開発環境を構築(2-2）２つの方法を示す
@@ -76,12 +78,11 @@ $ conda activate yolo_py_env
 #必要パッケージのインストール
 pip install ultralytics shapely pyproj pandas Pillow natsort tqdm
 ```
-
-> **GPU を使用する場合（推奨）**  
-> PyTorch の GPU 対応版をインストールしてください。CUDA バージョンは環境に合わせて変更してください。
-> ```bash
-> pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-> ```
+#### 3. GPU を使用する（推奨）
+GPU を使用する場合はPyTorch の GPU 対応版をインストールしてください。CUDA バージョンは環境に合わせて変更してください。
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+```
 
 #### 4. 学習済みモデルの配置
 
