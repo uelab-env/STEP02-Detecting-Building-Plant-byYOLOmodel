@@ -55,20 +55,25 @@
 #### 1. リポジトリのクローン
 
 ```bash
-git clone <リポジトリURL>
-cd <リポジトリ名>
+git clone <リポジトリURL>[URL](git@github.com:uelab-env/STEP02-Detecting-Building-Plant-byYOLOmodel.git)
+cd <リポジトリ名>[]
 ```
 
-#### 2. conda 環境の作成と有効化
-
+#### 2. 開発環境の構築
+yamlから開発環境を構築(2-1）推奨、または手順に従ってcondaで開発環境を構築(2-2）２つの方法を示す
+##### 2-1. yamlから仮想環境構築
+conda環境定義ファイル（YAML）から仮想環境を再構築する
 ```bash
-conda create -n yolo_py_env python=3.10 -y ## お気に入りのpythonの仮想環境あれば、それを使用してもらってください
-conda activate yolo_py_env
+$ conda env create -f yolo_env.yaml
+$ conda activate STEP02yolo_env
 ```
-
-#### 3. 必要パッケージのインストール
-
+##### 2-2. conda で開発環境を構築
 ```bash
+#仮想環境作成
+$ conda create -n yolo_py_env python=3.10 -y ## お気に入りのpythonの仮想環境あれば、それを使用してもらってください
+#仮想環境有効化
+$ conda activate yolo_py_env
+#必要パッケージのインストール
 pip install ultralytics shapely pyproj pandas Pillow natsort tqdm
 ```
 
@@ -90,6 +95,12 @@ pip install ultralytics shapely pyproj pandas Pillow natsort tqdm
 | 配置先 | 内容 |
 |--------|------|
 | `input/image_cut/png/` | 航空写真の PNG 画像（1000×750px） |
+| `input/image_cut/tfw/` | 対応する TFW ファイル（ファイル名は PNG と同一） |
+| `input/building_list/TokyoChuo.csv` | 建物リスト CSV（`緯度`・`経度` 列が必要） |
+| `bld_boundary/` | 建物境界線 XML（国土地理院「基盤地図情報 建物外周」FGD BldA 形式） |
+
+- 入力ファイルの配置
+1. STEP01の以下のパスの"地名".csvを入力ファイルとする  
 | `input/image_cut/tfw/` | 対応する TFW ファイル（ファイル名は PNG と同一） |
 | `input/building_list/TokyoChuo.csv` | 建物リスト CSV（`緯度`・`経度` 列が必要） |
 | `bld_boundary/` | 建物境界線 XML（国土地理院「基盤地図情報 建物外周」FGD BldA 形式） |
@@ -356,9 +367,3 @@ Edit the constants at the top of the script to adjust behavior.
 ---
 
 ### Notes
-
-- **⚠️ MUST change `EPSG_CODE` to match your target region's plane rectangular coordinate system**  
-  Default is Tokyo area (Zone IX, EPSG:6677). Using the wrong coordinate system will cause significant positioning errors.
-- Always activate the conda environment (`conda activate yolo_py_env`) before running.
-- Building boundary XMLs must be in the Japan Geospatial Information Authority (GSI) Fundamental Geospatial Data (FGD) BldA GML format.
-- Ensure PNG images are present in `input/image_cut/png/` before running STEP 1.
