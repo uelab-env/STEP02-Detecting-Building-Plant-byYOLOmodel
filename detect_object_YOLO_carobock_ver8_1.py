@@ -31,28 +31,48 @@ from natsort import natsorted
 from pyproj import Transformer
 from PIL import Image
 
+import area_config
+
 # =====================================================
 # 定数定義
 # =====================================================
-GSD_METERS_PER_PIXEL = 0.075
-EPSG_CODE = 6677
 INITIAL_THRESHOLD = 0.1  # 初期検出閾値
 YOLO_BATCH_SIZE = 8       # バッチ推論枚数（メモリに合わせて調整）
 CACHE_DIR = "cache"       # キャッシュ保存先フォルダ
 USE_DETECTION_CACHE = True  # True: キャッシュがあれば再計算をスキップ / False: 強制再計算
 
-# Transformer をモジュールレベルでキャッシュ（呼び出しごとの生成コストを排除）
-_TRANSFORMER = Transformer.from_crs(f"EPSG:{EPSG_CODE}", "EPSG:4326", always_xy=True)
+# EPSGコードは対象地域によって変わるため、モジュールロード時点では確定できない。
+# main() の冒頭で area_config の対話プロンプトにより決定され、
+# set_current_epsg() でここにセットされる。
+CURRENT_EPSG_CODE = None
+_transformer_cache = {}  # {epsg_code: Transformer} キャッシュ（呼び出しごとの生成コストを排除）
+
+
+def set_current_epsg(epsg_code):
+    """今回の実行で使用するEPSGコードを設定し、Transformerを事前構築してキャッシュする"""
+    global CURRENT_EPSG_CODE
+    CURRENT_EPSG_CODE = epsg_code
+    get_transformer(epsg_code)
+
+
+def get_transformer(epsg_code):
+    """epsg_code に対応する Transformer をキャッシュから取得（未生成なら作成）"""
+    if epsg_code not in _transformer_cache:
+        _transformer_cache[epsg_code] = Transformer.from_crs(
+            f"EPSG:{epsg_code}", "EPSG:4326", always_xy=True
+        )
+    return _transformer_cache[epsg_code]
 
 # =====================================================
 # キャッシュ保存・読み込み
 # =====================================================
-def get_cache_paths(cache_dir=CACHE_DIR):
-    """キャッシュファイルのパスを返す"""
+def get_cache_paths(area_id, cache_dir=CACHE_DIR):
+    """キャッシュファイルのパスを返す（area_id でファイル名を名前空間化し、
+    異なる地域のキャッシュが誤って再利用されるのを防ぐ）"""
     os.makedirs(cache_dir, exist_ok=True)
     return {
-        'detections': os.path.join(cache_dir, 'detections_cache.json'),
-        'building_map': os.path.join(cache_dir, 'building_detections_map_cache.json'),
+        'detections': os.path.join(cache_dir, f'{area_id}_detections_cache.json'),
+        'building_map': os.path.join(cache_dir, f'{area_id}_building_detections_map_cache.json'),
     }
 
 
@@ -103,21 +123,20 @@ def read_tfw(tfw_path):
 # =====================================================
 # ピクセル座標→緯度経度変換
 # =====================================================
-def pixel_to_latlng(px, py, A, D, B, E, C, F, epsg_code=EPSG_CODE):
-    """ピクセル座標を緯度経度に変換"""
+def pixel_to_latlng(px, py, A, D, B, E, C, F, epsg_code=None):
+    """ピクセル座標を緯度経度に変換。epsg_code省略時は set_current_epsg() で
+    設定された今回の実行対象地域のEPSGコードを使用する。"""
+    if epsg_code is None:
+        epsg_code = CURRENT_EPSG_CODE
+
     x_meters = A * px + B * py + C
     y_meters = D * px + E * py + F
 
     try:
-        # モジュールレベルのキャッシュ済み Transformer を使用
-        # epsg_code が定数と一致する場合（通常ケース）はキャッシュを流用
-        if epsg_code == EPSG_CODE:
-            lng, lat = _TRANSFORMER.transform(x_meters, y_meters)
-        else:
-            t = Transformer.from_crs(f"EPSG:{epsg_code}", "EPSG:4326", always_xy=True)
-            lng, lat = t.transform(x_meters, y_meters)
+        t = get_transformer(epsg_code)
+        lng, lat = t.transform(x_meters, y_meters)
         return lat, lng
-    except:
+    except Exception:
         return None, None
 
 
@@ -463,16 +482,23 @@ def main():
     print("="*80)
     print("YOLO検出と固定閾値による設備判定プログラム (ver8.2)")
     print("="*80)
-    
+
+    # 対象エリアの選択（建物リストCSVと平面直角座標系は別軸のプロンプト。
+    # 建物リストは都道府県内のさらに細かい地域単位のことがあるため）
+    building_csv_path = area_config.prompt_building_csv_path()
+    epsg_code = area_config.prompt_epsg_code()
+    set_current_epsg(epsg_code)
+
     # パス設定
     png_folder = os.path.join("input", "image_cut", "png")
     tfw_folder = os.path.join("input", "image_cut", "tfw")
     model_path = "models/best.pt"
-    building_csv_path = "input/building_list/TokyoChuo.csv"
     boundary_folder = "bld_boundary"
 
-    # キャッシュパス確認
-    cache_paths = get_cache_paths()
+    # キャッシュパス確認（area_idで名前空間化し、地域切替時に別地域の
+    # キャッシュを誤って再利用しないようにする）
+    area_id = os.path.splitext(os.path.basename(building_csv_path))[0]
+    cache_paths = get_cache_paths(area_id)
     use_det_cache = USE_DETECTION_CACHE and os.path.exists(cache_paths['detections'])
     use_map_cache = USE_DETECTION_CACHE and os.path.exists(cache_paths['building_map'])
 
@@ -539,8 +565,7 @@ def main():
     # ステップ4: 入力CSVに plant 列を追加したファイルを保存
     output_folder = "output"
     os.makedirs(output_folder, exist_ok=True)
-    input_csv_name = os.path.splitext(os.path.basename(building_csv_path))[0]
-    output_csv_path = os.path.join(output_folder, input_csv_name + ".csv")
+    output_csv_path = os.path.join(output_folder, area_id + ".csv")
     output_df.to_csv(output_csv_path, index=False, encoding='utf-8-sig')
     print(f"\n出力CSVを保存: {output_csv_path}")
     
