@@ -78,7 +78,7 @@ conda activate yolo_env
 
 #### 3. GPU を使用する場合
 
-`yolo_env.yml` には CUDA 対応版の `torch` / `torchvision` が既に含まれているため、追加のインストール作業は不要です。NVIDIA GPU が搭載された環境では自動的に使用されます（`nvidia-smi` コマンドでドライバがyml内のCUDAバージョンに対応しているか確認してください）。GPUが無い環境ではCPUで自動的に動作します（追加設定不要）。
+NVIDIA GPUを利用する場合は、nvidia-smi コマンドでGPUドライバが対応するCUDAバージョンを確認し、PyTorch公式サイト（Get Started）で対応するPyTorch CUDA版のインストールコマンドを取得してください。CPU実行の場合は追加インストールは不要です。
 
 #### 4. 学習済みモデルの配置
 
