@@ -182,15 +182,24 @@ python detect_object_YOLO_carobock_ver8_1.py
 番号を入力 [1-2] > 2
 
 対象地域の平面直角座標系（EPSGコード）を設定します。
-入力例: 都道府県名（東京都 / 兵庫県）、系番号（IX / 9 / 系9）、EPSGコード直接指定（6677 / EPSG:6677）
-対象地域 > 兵庫県
-  → EPSG:6673（系V）を使用します。
-  よろしいですか？ [Y/n] > y
+対象地域の都道府県名を入力してください（例: 東京都 / 兵庫県）。
+対象地域（都道府県名） > 兵庫県
+  → 兵庫県: EPSG:6673（系V）を使用します。
 ```
 
 - 建物リストCSVが1件しかない場合は自動選択されます。
-- 都道府県が複数の系にまたがる場合（東京都・北海道・鹿児島県・沖縄県）は、さらにサブ選択のプロンプトが表示されます。
-- 都道府県名の代わりに `6673` や `EPSG:6673`、系番号 `V` / `5` / `系5` を直接入力することもできます。
+- 都道府県名を入力するだけで、対応するEPSGコードが自動的に決定されます。
+- 東京都・北海道・鹿児島県・沖縄県は複数の系にまたがるため、まず最も一般的なケース（東京都なら本土、北海道なら道央など）が自動選択され、確認が求められます。
+
+  ```
+  対象地域（都道府県名） > 東京都
+    東京都 は複数の平面直角座標系にまたがります。
+    → 最も一般的なケース「本土」として EPSG:6677（系IX）を使用します。
+    よろしいですか？ [Y/n] > y
+    → 東京都: EPSG:6677（系IX）を使用します。
+  ```
+
+  小笠原諸島など本土以外が対象の場合は、確認プロンプトで `n` と入力すると、具体的な地域を選択するメニューが表示されます。
 
 実行が完了すると、`output/<選択したCSVのファイル名>.csv` に `plant` 列が追加された CSV が出力されます。
 `plant` 列の値：`CT` / `ACC` / `MUL` / `PAC` / 空文字（検出なし）
@@ -277,7 +286,7 @@ YOLOモデルによる検出は、`input/image_cut/png/` にある **1000×750px
 | XVIII | 6686 | 東京都沖ノ鳥島 |
 | XIX | 6687 | 東京都南鳥島 |
 
-都道府県名の代わりに、系番号（`IX` / `9` / `系9`）やEPSGコード（`6677` / `EPSG:6677`）を直接入力することも常に可能です。
+東京都・北海道・鹿児島県・沖縄県のように複数系にまたがる都道府県は、最も一般的なケース（東京都=本土/系IX、北海道=道央/系XII、鹿児島県=本土/系II、沖縄県=沖縄本島など/系XV）が自動選択された上で確認を求められます。それ以外の地域（離島など）が対象の場合は、確認プロンプトで `n` と答えると具体的な地域を選択できます。
 
 ---
 
@@ -466,15 +475,24 @@ Running it first prompts you interactively for the following (no code editing re
 番号を入力 [1-2] > 2
 
 対象地域の平面直角座標系（EPSGコード）を設定します。
-入力例: 都道府県名（東京都 / 兵庫県）、系番号（IX / 9 / 系9）、EPSGコード直接指定（6677 / EPSG:6677）
-対象地域 > 兵庫県
-  → EPSG:6673（系V）を使用します。
-  よろしいですか？ [Y/n] > y
+対象地域の都道府県名を入力してください（例: 東京都 / 兵庫県）。
+対象地域（都道府県名） > 兵庫県
+  → 兵庫県: EPSG:6673（系V）を使用します。
 ```
 
 - If only one building-list CSV exists, it's selected automatically.
-- If the selected prefecture spans multiple zones (Tokyo, Hokkaido, Kagoshima, Okinawa), a further sub-region prompt appears.
-- Instead of a prefecture name, you can always enter an EPSG code (`6673` / `EPSG:6673`) or a zone identifier (`V` / `5` / `系5`) directly.
+- Just enter the prefecture name — the corresponding EPSG code is resolved automatically.
+- Tokyo, Hokkaido, Kagoshima, and Okinawa span multiple zones, so the most common case (mainland for Tokyo/Kagoshima, 道央/Zone XII for Hokkaido, main island for Okinawa) is auto-selected first and a confirmation is requested:
+
+  ```
+  対象地域（都道府県名） > 東京都
+    東京都 は複数の平面直角座標系にまたがります。
+    → 最も一般的なケース「本土」として EPSG:6677（系IX）を使用します。
+    よろしいですか？ [Y/n] > y
+    → 東京都: EPSG:6677（系IX）を使用します。
+  ```
+
+  If a different sub-region (e.g. a remote island) is the actual target, answering `n` at the confirmation prompt brings up a menu to select the specific sub-region.
 
 When complete, `output/<selected CSV filename>.csv` will be created with a `plant` column added.
 Possible values: `CT` / `ACC` / `MUL` / `PAC` / empty string (no equipment detected)
@@ -561,7 +579,7 @@ Constants in `tile_geotiff.py` (adjust when tiling a raw GeoTIFF):
 | XVIII | 6686 | Tokyo-to Okinotorishima |
 | XIX | 6687 | Tokyo-to Minamitorishima |
 
-You can always enter a zone identifier (`IX` / `9` / `系9`) or an EPSG code (`6677` / `EPSG:6677`) directly instead of a prefecture name.
+Tokyo, Hokkaido, Kagoshima, and Okinawa span multiple zones. In these cases the most common one is auto-selected and confirmed first (Tokyo = mainland/Zone IX, Hokkaido = 道央/Zone XII, Kagoshima = mainland/Zone II, Okinawa = main island etc./Zone XV). If a different sub-region (e.g. a remote island) is the actual target, answering `n` at the confirmation prompt brings up a menu to select the specific sub-region.
 
 ---
 
