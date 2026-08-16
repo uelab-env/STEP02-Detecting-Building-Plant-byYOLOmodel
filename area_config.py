@@ -4,10 +4,11 @@
 EPSGコードを対話的に決定するためのモジュール。
 
 系番号（I〜XIX） <-> EPSG:6669〜6687 の対応、および都道府県ごとにどの系を
-使用するかは国土地理院の公式区分に基づく。北海道・鹿児島県・東京都・沖縄県は
-複数の系にまたがるため、該当する場合はサブ選択を挟む。
+使用するかは国土地理院の公式区分に基づく。
 
-どの経路でも解決できない場合に備え、EPSGコード・系番号の直接指定も常に受け付ける。
+都道府県名を入力するだけでEPSGコードを自動決定する。北海道・鹿児島県・東京都・
+沖縄県は複数の系にまたがるため、最も一般的なケース（本土・道央など）を自動選択
+したうえで確認を求め、却下された場合のみ具体的な地域を選択させる。
 """
 
 import glob
@@ -24,7 +25,6 @@ ROMAN_NUMERALS = [
     "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",
     "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX",
 ]
-ROMAN_TO_ZONE = {roman: i + 1 for i, roman in enumerate(ROMAN_NUMERALS)}
 
 
 # =====================================================
@@ -60,9 +60,9 @@ PREFECTURE_ZONE_MAP = {
     "千葉県": 9, "群馬県": 9, "神奈川県": 9,
     # 系X（東北北部）
     "青森県": 10, "秋田県": 10, "山形県": 10, "岩手県": 10, "宮城県": 10,
-    # 系XI・XII・XIII（北海道）
-    "北海道": [("道南西部（小樽市・函館市・伊達市など）", 11),
-               ("道央（札幌市・旭川市・稚内市など）", 12),
+    # 系XI・XII・XIII（北海道）。道央（札幌市を含み人口最大）を主要ケースとする
+    "北海道": [("道央（札幌市・旭川市・稚内市など）", 12),
+               ("道南西部（小樽市・函館市・伊達市など）", 11),
                ("道東（北見市・帯広市・釧路市・網走市・根室市など）", 13)],
     # 系XV・XVI・XVII（沖縄）
     "沖縄県": [("沖縄本島など（東経126°-130°）", 15),
@@ -72,22 +72,6 @@ PREFECTURE_ZONE_MAP = {
 
 
 _PREF_SUFFIXES = ("都", "道", "府", "県")
-
-
-def _try_parse_epsg(s):
-    """'6677' / 'EPSG:6677' のような文字列をEPSGコードとして解釈する。"""
-    s = s.strip().upper().replace("EPSG:", "").replace("EPSG", "").strip()
-    if s.isdigit() and int(s) in EPSG_TO_ZONE:
-        return int(s)
-    return None
-
-
-def _try_parse_zone(s):
-    """'IX' / '9' / '系9' / '9系' のような文字列を系番号(1-19)として解釈する。"""
-    s = s.strip().upper().replace("ZONE", "").replace("系", "").strip()
-    if s.isdigit() and 1 <= int(s) <= 19:
-        return int(s)
-    return ROMAN_TO_ZONE.get(s)
 
 
 def _canonicalize_pref(raw):
@@ -114,48 +98,51 @@ def _prompt_subregion(pref_name, options, input_fn):
 
 def resolve_epsg_code(raw_input, input_fn=input):
     """
-    ユーザー入力からEPSGコードを解決する。
-    優先順位: 1) EPSGコード直接指定 2) 系番号 3) 都道府県名（複数系ならサブ選択）
-    解決できない場合は None を返す。
+    都道府県名からEPSGコードを解決する。
+    単一の系のみに属する都道府県は自動決定する。
+    複数の系にまたがる都道府県（北海道・鹿児島県・東京都・沖縄県）は、
+    最も一般的なケース（本土・道央など）を自動選択したうえで確認を求め、
+    却下された場合のみ具体的な地域を選択させる。
+    都道府県名として認識できない場合は None を返す。
     """
-    s = raw_input.strip()
+    pref = _canonicalize_pref(raw_input)
+    if pref is None:
+        return None
 
-    epsg = _try_parse_epsg(s)
-    if epsg is not None:
-        return epsg
+    entry = PREFECTURE_ZONE_MAP[pref]
+    if isinstance(entry, int):
+        zone = entry
+    else:
+        primary_label, primary_zone = entry[0]
+        print(f"  {pref} は複数の平面直角座標系にまたがります。")
+        print(f"  → 最も一般的なケース「{primary_label}」として "
+              f"EPSG:{ZONE_TO_EPSG[primary_zone]}（系{ROMAN_NUMERALS[primary_zone - 1]}）を使用します。")
+        confirm = input_fn("  よろしいですか？ [Y/n] > ").strip().lower()
+        if confirm in ("", "y", "yes"):
+            zone = primary_zone
+        else:
+            zone = _prompt_subregion(pref, entry, input_fn)
 
-    zone = _try_parse_zone(s)
-    if zone is not None:
-        return ZONE_TO_EPSG[zone]
-
-    pref = _canonicalize_pref(s)
-    if pref is not None:
-        entry = PREFECTURE_ZONE_MAP[pref]
-        zone = entry if isinstance(entry, int) else _prompt_subregion(pref, entry, input_fn)
-        return ZONE_TO_EPSG[zone]
-
-    return None
+    epsg = ZONE_TO_EPSG[zone]
+    print(f"  → {pref}: EPSG:{epsg}（系{ROMAN_NUMERALS[zone - 1]}）を使用します。")
+    return epsg
 
 
 def prompt_epsg_code(input_fn=input):
-    """対話的に対象地域を入力してもらい、EPSGコードを確定させる。"""
+    """対話的に対象地域（都道府県名）を入力してもらい、EPSGコードを確定させる。"""
     print("\n" + "=" * 80)
     print("対象地域の平面直角座標系（EPSGコード）を設定します。")
-    print("入力例: 都道府県名（東京都 / 兵庫県）、系番号（IX / 9 / 系9）、EPSGコード直接指定（6677 / EPSG:6677）")
+    print("対象地域の都道府県名を入力してください（例: 東京都 / 兵庫県）。")
     print("=" * 80)
     while True:
-        raw = input_fn("対象地域 > ")
+        raw = input_fn("対象地域（都道府県名） > ")
         if not raw.strip():
             continue
         epsg = resolve_epsg_code(raw, input_fn)
         if epsg is None:
-            print(f"  [エラー] '{raw}' を認識できませんでした。再入力してください。")
+            print(f"  [エラー] '{raw}' を都道府県名として認識できませんでした。再入力してください。")
             continue
-        zone = EPSG_TO_ZONE[epsg]
-        print(f"  → EPSG:{epsg}（系{ROMAN_NUMERALS[zone - 1]}）を使用します。")
-        confirm = input_fn("  よろしいですか？ [Y/n] > ").strip().lower()
-        if confirm in ("", "y", "yes"):
-            return epsg
+        return epsg
 
 
 def prompt_building_csv_path(building_list_dir="input/building_list", input_fn=input):
