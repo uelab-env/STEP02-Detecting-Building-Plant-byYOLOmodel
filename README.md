@@ -39,11 +39,11 @@ conda env create -f yolo_env.yml
 ├── models/
 │   └── best.pt                            # 学習済みモデル（別途入手）
 ├── input/
-│   ├── create_tile/                       # （任意）タイル分割前の生GeoTIFFを置く場所
+│   ├── create_tile/                       # タイル分割前の生GeoTIFFを置く場所
 │   │   └── 1_0001.tif
 │   ├── image_cut/
-│   │   ├── png/                           # 入力画像（分割済み航空写真、1000×750px）
-│   │   └── tfw/                           # 各画像の座標ファイル（TFW形式）
+│   │   ├── png/                           # 入力画像（**分割済み航空写真、1000×750px**）
+│   │   └── tfw/                           # 各画像の座標ファイル（TFW形式,tile_geotiff.pyで生成）
 │   └── building_list/
 │       └── <地名>.csv                     # 建物リスト（ZENRIN建物ポイントデータ）
 ├── bld_boundary/
@@ -61,8 +61,8 @@ conda env create -f yolo_env.yml
 #### 1. リポジトリのクローン
 
 ```bash
-git clone <リポジトリURL>
-cd <リポジトリ名>
+git clone git@github.com:uelab-env/STEP02-Detecting-Building-Plant-byYOLOmodel.git
+cd STEP02-Detecting-Building-Plant-byYOLOmodel
 ```
 [リポジトリURL]　：git@github.com:uelab-env/STEP02-Detecting-Building-Plant-byYOLOmodel.git
 [リポジトリ名]　：STEP02-Detecting-Building-Plant-byYOLOmodel
@@ -92,16 +92,16 @@ conda activate yolo_env
 
 | 配置先 | 内容 |
 |--------|------|
-| `input/create_tile/` | （任意）タイル分割前の生GeoTIFF。`tile_geotiff.py` で `png/`・`tfw/` に変換します |
-| `input/image_cut/png/` | 航空写真の PNG 画像（1000×750px） |
-| `input/image_cut/tfw/` | 対応する TFW ファイル（ファイル名は PNG と同一） |
+| `input/create_tile/` | タイル分割前の生GeoTIFF。`tile_geotiff.py` で `png/`・`tfw/` に変換します |
+| `input/image_cut/png/` | 航空写真の PNG 画像（**1000×750px**） |
+| `input/image_cut/tfw/` | 対応する TFW ファイル（ファイル名は PNG と同一,tile_geotiff.pyで生成） |
 | `input/building_list/<地名>.csv` | 建物リスト（ZENRIN建物ポイントデータ）。`緯度`・`経度` 列が必要 |
 | `bld_boundary/` | 建物境界線 XML（国土地理院「基盤地図情報 建物外周」FGD BldA 形式） |
 
 - 入力ファイルの配置
-1. STEP01の以下のパスの"地名".csvを入力ファイルとする
+1. 業務モデルの[STEP01](https://github.com/uelab-env/Building-Usage-Determination_py)の以下のパスの"地名".csvを入力ファイルとする
 ```01_Building-Usage-Determination\Building-Usage-Determination_py\"地名"\BuildingUsageDetermination_Chuo\"地名".csv```
-2. `input/building_list/` ディレクトリに、対象地域の建物リスト（ZENRIN建物ポイントデータ）CSVファイル"地名".csvを配置してください。
+2. `input/building_list/` ディレクトリに、対象地域の"地名".csvを配置してください。
 3. **コードの編集は不要です。** `detect_object_YOLO_carobock_ver8_1.py` を実行すると、使用するCSVファイルと対象地域（都道府県）を対話的に選択できます（詳細は「実行方法」参照）。
 
 - 建物境界線データは以下のリンクを参考にダウンロードしてください
@@ -117,7 +117,7 @@ https://uelab.growi.cloud/6a6c68099b9a6f8caadc8172
 その他の列はそのまま出力 CSV に引き継がれます。
 
 ---
-
+## 参考程度に
 ### GeoTIFFタイル分割について（`tile_geotiff.py`）
 
 航空写真がタイル分割済みのPNG+TFWではなく、位置情報付きの1枚の大きなGeoTIFF（例: `1_0001.tif`）として提供される場合、検出スクリプトが前提とする1000×750pxのPNG+TFW形式へあらかじめ変換する必要があります。
@@ -144,6 +144,9 @@ GeoTIFF規格でジオリファレンス情報を埋め込むためのタグ（�
 **半ピクセル補正について**
 
 GeoTIFFにはさらに `GTRasterTypeGeoKey` というキーがあり、アフィン変換の原点がピクセルの「外角（Area規約、値=1）」を指すか「中心（Point規約、値=2）」を指すかを区別します。TFWは規約上「左上ピクセルの中心」を原点として扱うため、元データがArea規約（多くのGeoTIFFはこちら）の場合、変換時に0.5ピクセル分のオフセット補正が必要です。これを怠ると、全ての検出結果が実座標で数cm系統的にズレます。`tile_geotiff.py` はこの補正を自動的に行います。
+
+---  
+
 
 **使い方**
 
@@ -228,7 +231,7 @@ STEP 1 で生成された検出結果の可視化画像（`detection_results_ima
 
 YOLOモデルによる検出は、`input/image_cut/png/` にある **1000×750pxのタイル1枚単位** で実行されます。オルソモザイク画像全体（例: `1_0001.tif` の14592×25728px）を一括で推論にかけることはありません。これは学習済みモデル自体がこのタイルサイズで学習されていることに加え、メモリ使用量を抑えるためです（生のGeoTIFFしかない場合に `tile_geotiff.py` によるタイル分割が必須である理由でもあります）。
 
-`YOLO_BATCH_SIZE`（既定8）は、この「1000×750pxタイル」を一度に何枚まとめて `model.predict()` に渡すかを制御するパラメータです。検出の単位や精度そのものを変えるものではなく、純粋にスループット・メモリ使用量の調整用です。メモリが不足する場合は値を小さく、余裕がある場合は大きくしてください。
+`YOLO_BATCH_SIZE`（既定8）は、この「1000×750pxタイル」を一度に何枚まとめて 処理するかを制御するパラメータです。検出の単位や精度そのものを変えるものではなく、純粋にスループット・メモリ使用量の調整用です。メモリが不足する場合は値を小さく、余裕がある場合は大きくしてください。
 
 ---
 
@@ -318,7 +321,7 @@ Detected equipment classes:
 ├── models/
 │   └── best.pt                            # Trained model weights (obtain separately)
 ├── input/
-│   ├── create_tile/                       # (Optional) place raw GeoTIFFs here before tiling
+│   ├── create_tile/                       # place raw GeoTIFFs here before tiling
 │   │   └── 1_0001.tif
 │   ├── image_cut/
 │   │   ├── png/                           # Aerial image tiles (1000×750 px)
