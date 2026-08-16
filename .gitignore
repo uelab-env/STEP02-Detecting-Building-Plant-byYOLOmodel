@@ -1,5 +1,6 @@
-input/*
-bld_boundary/*
 detection_results_images/*
-results_past/*
+input/image_cut/_archive_tokyo/*
 cache/*
+input/building_list/*/
+results_past/*
+bld_boundary/*
