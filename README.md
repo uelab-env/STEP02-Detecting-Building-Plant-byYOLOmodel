@@ -37,7 +37,7 @@ conda env create -f yolo_env.yml
 ├── area_config.py                         # 対象地域→平面直角座標系(EPSG)の対話的決定
 ├── merge_images_with_tfw.py               # 検出結果画像の統合ツール
 ├── models/
-│   └── best.pt                            # 学習済みモデル（別途入手）
+│   └── best.pt                            # 学習済みモデル（別途作成、配置済み）
 ├── input/
 │   ├── create_tile/                       # タイル分割前の生GeoTIFFを置く場所
 │   │   └── 1_0001.tif
@@ -64,7 +64,7 @@ conda env create -f yolo_env.yml
 git clone git@github.com:uelab-env/STEP02-Detecting-Building-Plant-byYOLOmodel.git
 cd STEP02-Detecting-Building-Plant-byYOLOmodel
 ```
-[リポジトリURL]　：git@github.com:uelab-env/STEP02-Detecting-Building-Plant-byYOLOmodel.git
+[リポジトリURL]　：git@github.com:uelab-env/STEP02-Detecting-Building-Plant-byYOLOmodel.git  
 [リポジトリ名]　：STEP02-Detecting-Building-Plant-byYOLOmodel
 
 #### 2. 開発環境の構築
@@ -82,9 +82,8 @@ NVIDIA GPUを利用する場合は、nvidia-smi コマンドでGPUドライバ�
 
 #### 4. 学習済みモデルの配置
 
-`models/best.pt` に学習済みモデルファイルを配置してください
-これは、西村がデフォルトで配置してます
-※学習済みモデルの生成方法に関してのリポジトリは、10月末までに作成
+西村により`models/best.pt` に学習済みモデルファイルが配置されています
+※学習済みモデルの生成方法に関してのリポジトリは、2026年10月末までに作成（予定）
 
 ---
 
